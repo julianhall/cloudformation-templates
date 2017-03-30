@@ -64,7 +64,7 @@ Resources:
           def lambda_handler(event, context):
               reservations = ec.describe_instances(
                   Filters=[
-                      {'Name': 'tag-key', 'Values': ['backup', 'Backup']},
+                      {'Name': 'tag:Backup', 'Values': [str(i) for i in range(1, 51)]},
                   ]
               ).get(
                   'Reservations', []
@@ -84,7 +84,7 @@ Resources:
                   try:
                       retention_days = [
                           int(t.get('Value')) for t in instance['Tags']
-                          if t['Key'] == 'Retention'][0]
+                          if t['Key'] == 'Backup'][0]
                   except IndexError:
                       retention_days = ${DefaultBackupRetentionDays}
 
@@ -97,6 +97,10 @@ Resources:
 
                       snap = ec.create_snapshot(
                           VolumeId=vol_id,
+                          Description='Automatic Backup of %s from %s' % (
+                              vol_id,
+                              instance['InstanceId']
+                          )
                       )
 
                       to_tag[retention_days].append(snap['SnapshotId'])
@@ -141,8 +145,7 @@ Resources:
 
               delete_on = datetime.date.today().strftime('%Y-%m-%d')
               filters = [
-                  {'Name': 'tag-key', 'Values': ['DeleteOn']},
-                  {'Name': 'tag-value', 'Values': [delete_on]},
+                  {'Name': 'tag:DeleteOn', 'Values': [delete_on]},
               ]
               snapshot_response = ec.describe_snapshots(OwnerIds=account_ids, Filters=filters)
 
@@ -156,7 +159,7 @@ Resources:
     Properties:
       Description: "Run the EBS snapshot creation script daily"
       Name: "SnapshotCreationScheduleRule"
-      ScheduleExpression: "cron(0 3 * * ? *)"
+      ScheduleExpression: "cron(0 5 * * ? *)"
       State: "ENABLED"
       Targets:
         - Arn: !GetAtt SnapshotCreationFunction.Arn
@@ -177,7 +180,7 @@ Resources:
     Properties:
       Description: "Run the EBS snapshot cleanup script daily"
       Name: "SnapshotCleanupScheduleRule"
-      ScheduleExpression: "cron(0 3 * * ? *)"
+      ScheduleExpression: "cron(0 6 * * ? *)"
       State: "ENABLED"
       Targets:
         - Arn: !GetAtt SnapshotCleanupFunction.Arn
